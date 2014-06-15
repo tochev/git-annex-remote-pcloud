@@ -1,0 +1,8 @@
+*.py[oc]
+*~
+.*.sw?
+__pycache__
+build/
+dist/
+*.egg-info
+tests/playground

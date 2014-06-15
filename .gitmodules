@@ -1,0 +1,3 @@
+[submodule "python3-pcloudapi"]
+	path = python3-pcloudapi
+	url = https://github.com/tochev/python3-pcloudapi

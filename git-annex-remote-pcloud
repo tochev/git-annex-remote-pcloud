@@ -1,0 +1,289 @@
+#!/usr/bin/env python3
+
+# git annex remote for pcloud
+# this program is supposed to be run by git annex
+#
+# $ git annex initremote mypcloud type=external externaltype=pcloud \
+#   path=/path/to/annex/in/pcloud credentials_file=~/.pcloud_auth \
+#   encryption=shared
+#
+# see USAGE
+
+import functools
+import os
+import re
+import requests
+import sys
+import traceback
+from pprint import pprint as pp
+
+# add path to the api in the submodule
+sys.path.append(os.path.join(os.path.dirname(__file__), 'python3-pcloudapi'))
+
+from pcloudapi import PCloudAPI, PCloudException
+
+version = '0.0.1'
+
+USAGE = """
+This program is supposed to run only called by git annex!!
+
+To use it execute:
+    PCLOUD_CREDENTIALS_FILE=/path/to/file \\
+    git annex initremote mypcloud type=external externaltype=pcloud \\
+        path=PCLOUD_FOLDER(default /annex) [credentials_file=~/.pcloud_auth] \\
+        encryption=none|shared|hybrid|pubkey
+
+The file with credentials should be one of:
+    - two lines (username and password)
+    - one line (authentication token)
+
+If the credentials file is supplied as an environment variable an authentication
+token will be acquired and saved in the git annex configuration.
+""".strip()
+
+
+def git_annex_report(indices=(), error_header=None):
+    """A simple wrapper that report [ACTION]-[OUTCOME] *args error_msg.
+
+    indices is indices of the arguments to report (0=self)
+    """
+    def decorator(f):
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            try:
+                f(*args, **kwargs)
+            except Exception as e:
+                for line in traceback.format_exc().splitlines():
+                    args[0].debug(line)
+                args[0].send(error_header or (f.__name__.upper() + '-FAILURE'),
+                            *([args[i] for i in indices] +
+                              ['  '.join(str(e).splitlines())]))
+                # Maybe we would like to print traceback for such errors
+                # as they might be unrecoverable.
+                if isinstance(e, KeyboardInterrupt):
+                    # nothing to do
+                    return
+                if isinstance(e, (PCloudException,
+                                  requests.RequestException,
+                                  IOError)):
+                    return
+                else:
+                    raise
+            else:
+                if not error_header:
+                    args[0].send(f.__name__.upper() + '-SUCCESS',
+                                *[args[i] for i in indices])
+        return wrapper
+    return decorator
+
+
+class GitAnnexRemoteProgressBar(object):
+
+    def __init__(self, report_func, step=524288):
+        # TODO: make it also depend on total file size
+        self.report_func = report_func
+        self.step = step
+        self.passed = 0
+        self.last = 0
+
+    def progress(self, count):
+        self.passed += count
+        if self.passed >= self.last + self.step:
+            self.last = self.passed
+            self.report_func("PROGRESS", self.passed)
+
+
+class PCloudGitAnnexRemote(object):
+
+    COST = 200 # expensive remote, see git annex's Config/Cost.hs
+
+    DEFAULT_PATH = '/annex'
+
+    SUPPORTED_COMMANDS = [
+        "INITREMOTE",
+        "PREPARE",
+        "TRANSFER",
+        "CHECKPRESENT",
+        "REMOVE",
+        "GETCOST",
+        "GETAVAILABILITY",
+    ]
+
+    CREDS_KEY = 'pcloud_creds'
+
+    def __init__(self, fin=None, fout=None):
+        self.auth = None
+        self.path = None
+        self.fin = fin or sys.stdin
+        self.fout = fout or sys.stdout
+        self.api = PCloudAPI()
+
+    def send(self, *args):
+        print(*args, file=self.fout, flush=True)
+
+    def debug(self, *args):
+        self.send("DEBUG", *args)
+
+    def recv(self):
+        return self.fin.readline().strip()
+
+    def getconfig(self, key, default=None):
+        self.send("GETCONFIG", key)
+        line = self.recv()
+        return line.startswith("VALUE ") and line.split(' ', 1)[1] or default
+
+    def setconfig(self, key, value):
+        self.send("SETCONFIG", key, value)
+
+    def dirhash(self, key):
+        self.send("DIRHASH", key)
+        line = self.recv()
+        assert line.startswith("VALUE "), "Unknown response to DIRHASH"
+        return line.split(' ', 1)[1]
+
+    def getcreds(self):
+        self.send("GETCREDS", self.CREDS_KEY)
+        line = self.recv()
+        assert line.startswith("CREDS"), "Unknown response to CREDS"
+        return line.split(' ', 2)[1:]
+
+    def setcreds(self, username, password):
+        self.send("SETCREDS", self.CREDS_KEY, username, password)
+
+    def parse_credentials_file(self, credentials_file):
+        credentials_file = os.path.expanduser(credentials_file)
+
+        # IOError should be caught and handled by git_annex_report
+        with open(credentials_file, 'r') as fd:
+            creds = [l.strip() for l in fd.read().strip().split('\n')]
+
+        if len(creds) not in [1,2]:
+            raise PCloudException("Credentials file in invalid format.")
+
+        return creds
+
+    def authenticate(self, creds, store_creds=True, only_for_new_auth=False):
+        AUTH_KEY = 'AUTH_KEY'
+        if len(creds) == 1:
+            creds = (AUTH_KEY, creds[0])
+        if AUTH_KEY != creds[0]:
+            # assume this is username, password
+            auth = self.api.login(*creds)
+            # no exception raised
+            if store_creds:
+                self.setcreds(AUTH_KEY, auth)
+        else:
+            # this is auth
+            self.api.auth = creds[1]
+            # the check of the auth is handled when we check the path
+            if store_creds and not only_for_new_auth:
+                self.setcreds(AUTH_KEY, self.api.auth)
+
+    def setup_auth(self):
+        credentials_file = os.environ.get('PCLOUD_CREDENTIALS_FILE', None)
+        if credentials_file:
+            return self.authenticate(
+                self.parse_credentials_file(credentials_file),
+                store_creds=True,
+                only_for_new_auth=False
+            )
+        credentials_file = self.getconfig('credentials_file')
+        if credentials_file:
+            return self.authenticate(
+                self.parse_credentials_file(credentials_file),
+                store_creds=False
+            )
+        creds = self.getcreds()
+        if creds:
+            return self.authenticate(creds,
+                                     store_creds=True,
+                                     only_for_new_auth=True)
+        # everything failed
+        raise PCloudException("Unable to find a source of credentials. "
+                              "Set PCLOUD_CREDENTIALS_FILE env variable")
+
+    def setup_path(self):
+        self.path = self.getconfig('path', PCloudGitAnnexRemote.DEFAULT_PATH)
+        if self.path.endswith('/') or not self.path.startswith('/'):
+            self.path = '/' + self.path.strip('/')
+            self.setconfig('path', self.path)
+        self.api.create_directory(self.path)
+
+    def get_filename(self, key):
+        """Return remote filename for key."""
+        return self.path + '/' + self.dirhash(key) + key
+
+    ### COMMANDS ###
+
+    @git_annex_report()
+    def initremote(self):
+        self.setup_auth()
+        self.setup_path() # also does auth
+
+    @git_annex_report()
+    def prepare(self):
+        self.setup_auth()
+        self.setup_path() # also does auth
+
+    @git_annex_report(indices=(1, 2))
+    def transfer(self, direction, key, local_path):
+        filename = self.get_filename(key)
+        progress = GitAnnexRemoteProgressBar(report_func=self.send).progress
+        if direction == 'STORE':
+            self.api.upload(local_path, filename, progress_callback=progress)
+        elif direction == 'RETRIEVE':
+            self.api.download(filename, local_path, progress_callback=progress)
+        else:
+            # Unknown direction
+            pass
+
+    @git_annex_report(indices=(1,), error_header='CHECKPRESENT-UNKNOWN')
+    def checkpresent(self, key):
+        filename = self.get_filename(key)
+        result = self.api.exists_file(filename)
+        self.send({True: 'CHECKPRESENT-SUCCESS',
+                   False: 'CHECKPRESENT-FAILURE'}[result],
+                  key)
+
+    @git_annex_report(indices=(1,))
+    def remove(self, key):
+        filename = self.get_filename(key)
+        self.api.delete_file(filename)
+
+    def getcost(self):
+        self.send("COST", self.COST)
+
+    def getavailability(self):
+        self.send("AVAILABILITY GLOBAL")
+
+    ### END COMMANDS ###
+
+    def main(self):
+        try:
+            if self.fin.isatty() or self.fout.isatty():
+                # we are running interactively
+                print(USAGE, file=sys.stderr)
+                print('\n'
+                      'Please make sure you know what you are doing or quit!'
+                      '\n',
+                      file=sys.stderr)
+                # no need to exit, maybe it is used for manual testing
+
+            self.send("VERSION 1")
+            for line in self.fin:
+                cmd, *args = line.strip().split(None, 3) # do not split filenames
+                if cmd not in self.SUPPORTED_COMMANDS:
+                    self.send("UNSUPPORTED-REQUEST")
+                    continue
+                getattr(self, cmd.lower())(*args)
+        except KeyboardInterrupt:
+            print("Aborting - interrupted by user", file=sys.stderr)
+
+
+if __name__ == '__main__':
+    remote = PCloudGitAnnexRemote()
+    if len(sys.argv)>1 and sys.argv[1].lower() in ['-h', '--help', '--usage']:
+        print(USAGE, file=sys.stderr)
+        exit(0)
+    remote.main()
+
