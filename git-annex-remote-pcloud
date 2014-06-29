@@ -33,7 +33,7 @@ To use it execute:
         path=PCLOUD_FOLDER(default /annex) [credentials_file=~/.pcloud_auth] \\
         encryption=none|shared|hybrid|pubkey
 
-The file with credentials should be one of:
+The file with credentials should be in one of the following formats:
     - two lines (username and password)
     - one line (authentication token)
 

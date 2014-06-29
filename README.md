@@ -47,7 +47,7 @@ Use it as you would use any git-annex remote.
             path=PCLOUD_FOLDER(default /annex) [credentials_file=~/.pcloud_auth] \
             encryption=none|shared|hybrid|pubkey
 
-    The file with credentials should be one of:
+    The file with credentials should be in one of the following formats:
         - two lines (username and password)
         - one line (authentication token)
 
@@ -64,13 +64,14 @@ Use it as you would use any git-annex remote.
 
 ### Using the Remote ###
 
-Just like any other git annex remote:
+Just like any other git annex remote, see the git-annex manual.
 
     $ git annex copy . --to mypcloud
     $ git annex copy . --from mypcloud
     $ git annex drop FILE --from mypcloud
-    $ git annex fsck --from mypcloud
+    $ git annex fsck --from mypcloud [--numcopies=2]
     $ git annex unused --from mypcloud
+    $ git annex sync mycploud [--content]
 
 
 ## License ##
@@ -87,7 +88,31 @@ Developed by Tocho Tochev [tocho AT tochev DOT net].
 
 #### How stable is it? ####
 
-See section Disclaimer.
+See the Disclaimer section.
+
+#### Backups ####
+
+You should backup the configuration like you would do for any other git-annex remote.
+
+Below is a list of git-annex hacks.
+
+Cloning the repo and configuring the remote in the new repo.
+
+    git clone OLD_REPO NEW_REPO
+    cd NEW_REPO
+    vim .git/config
+    # Add the git annex remote configuration from OLD_REPO/.git/config
+    # It should be something like:
+    #   [remote "mypcloud"] 
+    #       annex-externaltype = pcloud
+    #       annex-uuid = 38578a06-ff82-11e3-9b07-cb7a506f0b17
+    #       annex-cost = 200.0
+    #       annex-availability = GloballyAvailable
+
+The parameters of the git-annex remotes are kept in remote.log in the git-annex branch:
+
+    git show-file git-annex:remotes.log
+
 
 #### Ok, I want to help. What can I do? ####
 
