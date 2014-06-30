@@ -111,7 +111,7 @@ Cloning the repo and configuring the remote in the new repo.
 
 The parameters of the git-annex remotes are kept in remote.log in the git-annex branch:
 
-    git show-file git-annex:remotes.log
+    git show-file git-annex:remote.log | less
 
 
 #### Ok, I want to help. What can I do? ####
