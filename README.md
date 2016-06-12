@@ -7,9 +7,9 @@
 
 ## Disclaimer ##
 
-*git-annex-remote-pcloud* is still experimental. Although it should be reliable please for the time being *keep additional copies of all data you do not want to loose*.
+*git-annex-remote-pcloud* is still experimental. Although it should be reliable please for the time being *keep additional copies of all data you do not want to lose*.
 
-**I will not be held responsible for any data you loose as a result of using this software.**
+**I will not be held responsible for any data you lose as a result of using this software.**
 
 
 ## Install ##
@@ -103,7 +103,7 @@ Cloning the repo and configuring the remote in the new repo.
     vim .git/config
     # Add the git annex remote configuration from OLD_REPO/.git/config
     # It should be something like:
-    #   [remote "mypcloud"] 
+    #   [remote "mypcloud"]
     #       annex-externaltype = pcloud
     #       annex-uuid = 38578a06-ff82-11e3-9b07-cb7a506f0b17
     #       annex-cost = 200.0
