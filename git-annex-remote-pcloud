@@ -18,7 +18,7 @@ import traceback
 from pprint import pprint as pp
 
 # add path to the api in the submodule
-sys.path.append(os.path.join(os.path.dirname(__file__), 'python3-pcloudapi'))
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'python3-pcloudapi'))
 
 from pcloudapi import PCloudAPI, PCloudException
 

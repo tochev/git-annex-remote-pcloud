@@ -31,6 +31,28 @@ Create a symlink to `git-annex-remote-pcloud` in your path:
 
     sudo ln -s GIT_ANNEX_REMOTE_PLCOUD_HOME/git-annex-remote-pcloud /usr/bin/
 
+(where GIT_ANNEX_REMOTE_PLCOUD_HOME is the directory where your git-annex-remote-pcloud resides)
+
+
+### Alternative Install ###
+
+Alternatively you can download the python3 pcloud API and install it globally, but it is not recommended since it creates more clutter and might be harder to upgrade in the future.
+
+Install `python3`, `python3-requests`:
+
+    sudo apt-get install python3 python3-python-requests
+
+Install the python3 pcloud API:
+
+    git clone https://github.com/tochev/python3-pcloudapi
+    cd python3-pcloudapi
+    sudo python3 setup.py install
+
+Install the `git-annex-remote-pcloud`:
+
+    sudo wget https://raw.githubusercontent.com/tochev/git-annex-remote-pcloud/master/git-annex-remote-pcloud -O /usr/bin/git-annex-remote-pcloud
+    sudo chmod +x /usr/bin/git-annex-remote-pcloud
+
 
 ## Usage ##
 
