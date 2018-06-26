@@ -12,6 +12,13 @@
 **I will not be held responsible for any data you lose as a result of using this software.**
 
 
+## Changelog ##
+
+ * v0.0.2
+   * [Security] Update to the latest python3-pcloudapi library
+ * v0.0.1 - Initial public release
+
+
 ## Install ##
 
 Install `python3`, `python3-requests`:
@@ -32,6 +39,11 @@ Create a symlink to `git-annex-remote-pcloud` in your path:
     sudo ln -s GIT_ANNEX_REMOTE_PLCOUD_HOME/git-annex-remote-pcloud /usr/bin/
 
 (where GIT_ANNEX_REMOTE_PLCOUD_HOME is the directory where your git-annex-remote-pcloud resides)
+
+**For updating:**
+
+    git pull
+    git submodule update
 
 
 ### Alternative Install ###
